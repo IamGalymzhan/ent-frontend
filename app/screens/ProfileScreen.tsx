@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Alert } from 'react-native';
+import { View, Text, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
-import { getTests, analyzePerformance } from '../services/testService';
+import { getTests, analyzePerformance, Test } from '../services/testService';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import ScreenContainer from '../components/ScreenContainer';
@@ -16,20 +16,27 @@ const ProfileScreen = () => {
     weakestAreas: { testId: number; title: string; averageScore: number }[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tests, setTests] = useState<Test[]>([]);
   
   useEffect(() => {
-    loadPerformance();
+    loadData();
   }, [user]);
   
-  const loadPerformance = async () => {
+  const loadData = async () => {
     if (!user) return;
     
     setLoading(true);
     try {
-      const performanceData = await analyzePerformance();
+      // Load test data and performance data in parallel
+      const [testsData, performanceData] = await Promise.all([
+        getTests(),
+        analyzePerformance()
+      ]);
+      
+      setTests(testsData);
       setPerformance(performanceData);
     } catch (error) {
-      console.error('Error loading performance:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
@@ -124,7 +131,7 @@ const ProfileScreen = () => {
           </Card>
         </View>
         
-        {performance && performance.weakestAreas.length > 0 && (
+        {performance && performance.weakestAreas && performance.weakestAreas.length > 0 && (
           <Card className="mb-4">
             <Text className="font-bold mb-2">Жақсартуды қажет ететін пәндер</Text>
             {performance.weakestAreas.map((area, index) => (
@@ -142,7 +149,6 @@ const ProfileScreen = () => {
         
         {testHistory.length > 0 ? (
           testHistory.map((test, index) => {
-            const tests = getTests();
             const testInfo = tests.find(t => t.id === test.testId);
             
             return (
@@ -164,12 +170,14 @@ const ProfileScreen = () => {
           </View>
         )}
         
-        <Button
-          title="Шығу"
-          variant="danger"
-          onPress={handleLogout}
-          className="mt-6"
-        />
+        <View className="mt-6 mb-20">
+          <Button
+            title="Шығу"
+            variant="danger"
+            onPress={handleLogout}
+            className="w-full"
+          />
+        </View>
       </View>
     </ScreenContainer>
   );

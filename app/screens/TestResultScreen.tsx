@@ -20,15 +20,29 @@ const TestResultScreen = () => {
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    const test = getTestById(testId);
-    if (test) {
-      setQuestions(test.questions);
-    }
+    const loadTest = async () => {
+      try {
+        setLoading(true);
+        const test = await getTestById(testId);
+        if (test) {
+          setQuestions(test.questions);
+        } else {
+          console.error('Test not found');
+        }
+      } catch (error) {
+        console.error('Error loading test:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadTest();
   }, [testId]);
   
-  const totalQuestions = questions.length;
+  const totalQuestions = questions?.length || 0;
   const percentageScore = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
   
   const getScoreColor = () => {
@@ -56,6 +70,14 @@ const TestResultScreen = () => {
   const toggleShowAnswers = () => {
     setShowAnswers(!showAnswers);
   };
+  
+  if (loading) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white">
+        <Text className="text-lg text-gray-700">Жүктелуде...</Text>
+      </View>
+    );
+  }
   
   return (
     <ScrollView className="flex-1 bg-gray-50">
@@ -104,51 +126,55 @@ const TestResultScreen = () => {
         <View className="px-4 pb-6">
           <Text className="text-lg font-bold mb-4">Сұрақтар мен жауаптар</Text>
           
-          {questions.map((question, index) => {
-            const userAnswer = answers[index];
-            const isCorrect = userAnswer === question.correctAnswer;
-            
-            return (
-              <Card key={index} className="mb-4">
-                <Text className="text-lg font-medium mb-2">
-                  {index + 1}. {question.text}
-                </Text>
-                
-                {question.options.map((option, optionIndex) => (
-                  <View 
-                    key={optionIndex}
-                    className={`flex-row items-center p-3 rounded-lg mb-2 ${
-                      optionIndex === question.correctAnswer
-                        ? 'bg-green-100'
-                        : userAnswer === optionIndex && userAnswer !== question.correctAnswer
-                        ? 'bg-red-100'
-                        : 'bg-gray-100'
-                    }`}
-                  >
-                    <Text 
-                      className={`flex-1 ${
+          {questions && questions.length > 0 ? (
+            questions.map((question, index) => {
+              const userAnswer = answers[index];
+              const isCorrect = userAnswer === question.correctAnswer;
+              
+              return (
+                <Card key={index} className="mb-4">
+                  <Text className="text-lg font-medium mb-2">
+                    {index + 1}. {question.text}
+                  </Text>
+                  
+                  {question.options.map((option, optionIndex) => (
+                    <View 
+                      key={optionIndex}
+                      className={`flex-row items-center p-3 rounded-lg mb-2 ${
                         optionIndex === question.correctAnswer
-                          ? 'text-green-800'
+                          ? 'bg-green-100'
                           : userAnswer === optionIndex && userAnswer !== question.correctAnswer
-                          ? 'text-red-800'
-                          : 'text-gray-800'
+                          ? 'bg-red-100'
+                          : 'bg-gray-100'
                       }`}
                     >
-                      {option}
-                    </Text>
-                    
-                    {optionIndex === question.correctAnswer && (
-                      <MaterialIcons name="check-circle" size={24} color="#16a34a" />
-                    )}
-                    
-                    {userAnswer === optionIndex && userAnswer !== question.correctAnswer && (
-                      <MaterialIcons name="cancel" size={24} color="#dc2626" />
-                    )}
-                  </View>
-                ))}
-              </Card>
-            );
-          })}
+                      <Text 
+                        className={`flex-1 ${
+                          optionIndex === question.correctAnswer
+                            ? 'text-green-800'
+                            : userAnswer === optionIndex && userAnswer !== question.correctAnswer
+                            ? 'text-red-800'
+                            : 'text-gray-800'
+                        }`}
+                      >
+                        {option}
+                      </Text>
+                      
+                      {optionIndex === question.correctAnswer && (
+                        <MaterialIcons name="check-circle" size={24} color="#16a34a" />
+                      )}
+                      
+                      {userAnswer === optionIndex && userAnswer !== question.correctAnswer && (
+                        <MaterialIcons name="cancel" size={24} color="#dc2626" />
+                      )}
+                    </View>
+                  ))}
+                </Card>
+              );
+            })
+          ) : (
+            <Text className="text-center text-gray-600">Сұрақтар табылмады</Text>
+          )}
         </View>
       )}
     </ScrollView>

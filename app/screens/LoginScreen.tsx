@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -7,6 +7,7 @@ import { AuthStackParamList } from '../navigation';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/Button';
 import Input from '../components/Input';
+import ScreenContainer from '../components/ScreenContainer';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -38,8 +39,8 @@ const LoginScreen = () => {
   };
   
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1 }}>
-      <View className="flex-1 justify-center p-6">
+    <ScreenContainer scroll keyboardAvoiding className="bg-white p-4">
+      <View className="flex-1 justify-center py-10">
         <View className="items-center mb-8">
           <Text className="text-3xl font-bold text-blue-600">ЕНТ-ға Дайындық</Text>
           <Text className="text-lg text-gray-600 mt-2">Біліміңді тексер</Text>
@@ -82,13 +83,13 @@ const LoginScreen = () => {
           </Pressable>
         </View>
         
-        <View className="items-center mt-8">
+        <View className="items-center mt-8 mb-4">
           <Text className="text-gray-500 text-sm text-center px-6">
             ЕНТ-ға дайындалу үшін ең жақсы қосымша. Тесттерді шешіп, жетістіктеріңізді бақылаңыз.
           </Text>
         </View>
       </View>
-    </ScrollView>
+    </ScreenContainer>
   );
 };
 

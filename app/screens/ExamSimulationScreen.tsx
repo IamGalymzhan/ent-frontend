@@ -23,15 +23,15 @@ const ExamSimulationScreen = () => {
     loadQuestions();
   }, []);
 
-  const loadQuestions = () => {
+  const loadQuestions = async () => {
     setLoading(true);
     try {
-      const tests = getTests();
+      const tests = await getTests();
       const allQuestions: ExamQuestion[] = [];
       
       // Add questions from each test
-      tests.forEach(test => {
-        test.questions.forEach(question => {
+      tests.forEach((test: Test) => {
+        test.questions.forEach((question: Question) => {
           allQuestions.push({
             ...question,
             // Keep original numeric id, add a separate unique identifier

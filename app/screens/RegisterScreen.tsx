@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -7,6 +7,7 @@ import { AuthStackParamList } from '../navigation';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/Button';
 import Input from '../components/Input';
+import ScreenContainer from '../components/ScreenContainer';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
@@ -62,8 +63,8 @@ const RegisterScreen = () => {
   };
   
   return (
-    <ScrollView className="flex-1 bg-white" contentContainerStyle={{ flexGrow: 1 }}>
-      <View className="flex-1 justify-center p-6">
+    <ScreenContainer scroll keyboardAvoiding className="bg-white p-4">
+      <View className="flex-1 justify-center py-8">
         <View className="items-center mb-6">
           <Text className="text-3xl font-bold text-blue-600">Тіркелу</Text>
           <Text className="text-lg text-gray-600 mt-2">ЕНТ-ға Дайындық</Text>
@@ -123,14 +124,14 @@ const RegisterScreen = () => {
           />
         </View>
         
-        <View className="flex-row justify-center mt-4">
+        <View className="flex-row justify-center mt-4 mb-4">
           <Text className="text-gray-600">Тіркелгіңіз бар ма? </Text>
           <Pressable onPress={navigateToLogin}>
             <Text className="text-blue-600 font-bold">Кіру</Text>
           </Pressable>
         </View>
       </View>
-    </ScrollView>
+    </ScreenContainer>
   );
 };
 

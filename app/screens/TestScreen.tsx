@@ -25,13 +25,17 @@ const TestScreen = () => {
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    loadTest();
+    const fetchTest = async () => {
+      await loadTest();
+    };
+    
+    fetchTest();
   }, []);
   
-  const loadTest = () => {
+  const loadTest = async () => {
     setLoading(true);
     try {
-      const test = getTestById(testId);
+      const test = await getTestById(testId);
       
       if (!test) {
         Alert.alert('Қате', 'Тест табылмады');
@@ -69,21 +73,14 @@ const TestScreen = () => {
     }
   };
   
-  const calculateScore = () => {
-    let score = 0;
-    
-    questions.forEach((question, index) => {
-      if (selectedAnswers[index] === question.correctAnswer) {
-        score++;
-      }
-    });
-    
-    return score;
-  };
-  
   const handleFinishTest = async () => {
     // Check if all questions are answered
     const unansweredQuestions = selectedAnswers.filter(answer => answer === -1).length;
+    
+    // Capture current state values to pass to finishTest
+    const currentQuestions = [...questions];
+    const currentSelectedAnswers = [...selectedAnswers];
+    const currentTestId = testId;
     
     if (unansweredQuestions > 0) {
       Alert.alert(
@@ -91,25 +88,35 @@ const TestScreen = () => {
         `Сіз барлық сұрақтарға жауап бермедіңіз. ${unansweredQuestions} сұрақ қалды.`,
         [
           { text: 'Жоқ, жалғастыру', style: 'cancel' },
-          { text: 'Иә, аяқтау', onPress: finishTest }
+          { 
+            text: 'Иә, аяқтау', 
+            onPress: () => finishTest(currentQuestions, currentSelectedAnswers, currentTestId) 
+          }
         ]
       );
     } else {
-      finishTest();
+      finishTest(currentQuestions, currentSelectedAnswers, currentTestId);
     }
   };
   
-  const finishTest = async () => {
-    const score = calculateScore();
+  const finishTest = async (currentQuestions: Question[], currentAnswers: number[], currentTestId: number) => {
+    // Calculate score using the passed parameters
+    let score = 0;
+    
+    currentQuestions.forEach((question, index) => {
+      if (currentAnswers[index] === question.correctAnswer) {
+        score++;
+      }
+    });
     
     // Save test attempt for the user if logged in
     if (user) {
       try {
         await updateUserTestHistory({
-          testId,
+          testId: currentTestId,
           date: new Date().toISOString(),
           score,
-          totalQuestions: questions.length
+          totalQuestions: currentQuestions.length
         });
       } catch (error) {
         console.error('Error saving test history:', error);
@@ -117,11 +124,17 @@ const TestScreen = () => {
     }
     
     // Navigate to results screen
-    navigation.navigate('TestResult', {
-      testId,
-      score,
-      answers: selectedAnswers
-    });
+    if (currentQuestions && currentQuestions.length > 0 && currentAnswers && currentTestId) {
+      navigation.navigate('TestResult', {
+        testId: currentTestId,
+        score,
+        answers: currentAnswers
+      });
+    } else {
+      console.error('Cannot navigate to results: missing required data');
+      Alert.alert('Қате', 'Тест нәтижелерін жүктеу кезінде қате орын алды');
+      navigation.navigate('TestList');
+    }
   };
   
   if (loading || questions.length === 0) {

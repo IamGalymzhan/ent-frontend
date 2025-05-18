@@ -27,11 +27,12 @@ const AIHelperScreen = () => {
           weaknesses: [],
           recommendations: ['Дәлірек талдау алу үшін, алдымен жүйеге кіріп, бірнеше тест тапсырыңыз.']
         });
+        setLoading(false);
         return;
       }
       
-      const tests = getTests();
-      const generatedFeedback = generateAIFeedback(user, tests);
+      const tests = await getTests();
+      const generatedFeedback = await generateAIFeedback(user, tests);
       setFeedback(generatedFeedback);
     } catch (error) {
       console.error('Error generating AI feedback:', error);

@@ -1,5 +1,6 @@
 import { Test } from './testService';
 import { TestAttempt, User } from './authService';
+import { apiCall, API_ENDPOINTS, getApiConfig } from './api';
 
 // In a real app, this would be an API call to an AI service
 // For now, we'll use mock logic to generate feedback
@@ -11,36 +12,59 @@ export interface AIFeedback {
   recommendations: string[];
 }
 
-export const generateAIFeedback = (user: User, tests: Test[]): AIFeedback => {
-  if (!user || !user.testHistory || user.testHistory.length === 0) {
+export const generateAIFeedback = async (user: User, tests: Test[]): Promise<AIFeedback> => {
+  try {
+    // Check if we should use the real backend
+    const config = await getApiConfig();
+    
+    if (config.aiHelper.useBackend) {
+      // Use real backend API
+      return await apiCall<AIFeedback>(API_ENDPOINTS.AI_HELPER.GENERATE_FEEDBACK, {
+        method: 'POST',
+        body: JSON.stringify({ user, tests })
+      });
+    } else {
+      // Simulate AI feedback generation
+      if (!user || !user.testHistory || user.testHistory.length === 0) {
+        return {
+          overview: 'Тест тапсырмалары туралы деректер жеткіліксіз. Кеңес алу үшін біраз тест тапсырыңыз.',
+          strengths: [],
+          weaknesses: [],
+          recommendations: ['Бірнеше тест тапсырып, нәтижелерді талдаңыз.']
+        };
+      }
+      
+      // Calculate performance by subject
+      const subjectPerformance = calculateSubjectPerformance(user.testHistory, tests);
+      
+      // Find strengths and weaknesses
+      const sortedSubjects = [...subjectPerformance].sort((a, b) => b.percentageScore - a.percentageScore);
+      const strengths = sortedSubjects.slice(0, 2).filter(s => s.percentageScore >= 60);
+      const weaknesses = sortedSubjects.slice(-2).filter(s => s.percentageScore < 60);
+      
+      // Generate feedback
+      const overview = generateOverview(user, subjectPerformance);
+      const strengthsFeedback = generateStrengthsFeedback(strengths);
+      const weaknessesFeedback = generateWeaknessesFeedback(weaknesses);
+      const recommendations = generateRecommendations(weaknesses, strengths);
+      
+      return {
+        overview,
+        strengths: strengthsFeedback,
+        weaknesses: weaknessesFeedback,
+        recommendations
+      };
+    }
+  } catch (error) {
+    console.error('Generate AI feedback error:', error);
+    // Provide a fallback response in case of error
     return {
-      overview: 'Тест тапсырмалары туралы деректер жеткіліксіз. Кеңес алу үшін біраз тест тапсырыңыз.',
+      overview: 'AI жүйесіне қолжеткізу мүмкін болмады. Кейінірек қайталап көріңіз.',
       strengths: [],
       weaknesses: [],
-      recommendations: ['Бірнеше тест тапсырып, нәтижелерді талдаңыз.']
+      recommendations: ['Интернет байланысын тексеріңіз.']
     };
   }
-  
-  // Calculate performance by subject
-  const subjectPerformance = calculateSubjectPerformance(user.testHistory, tests);
-  
-  // Find strengths and weaknesses
-  const sortedSubjects = [...subjectPerformance].sort((a, b) => b.percentageScore - a.percentageScore);
-  const strengths = sortedSubjects.slice(0, 2).filter(s => s.percentageScore >= 60);
-  const weaknesses = sortedSubjects.slice(-2).filter(s => s.percentageScore < 60);
-  
-  // Generate feedback
-  const overview = generateOverview(user, subjectPerformance);
-  const strengthsFeedback = generateStrengthsFeedback(strengths);
-  const weaknessesFeedback = generateWeaknessesFeedback(weaknesses);
-  const recommendations = generateRecommendations(weaknesses, strengths);
-  
-  return {
-    overview,
-    strengths: strengthsFeedback,
-    weaknesses: weaknessesFeedback,
-    recommendations
-  };
 };
 
 // Helper functions

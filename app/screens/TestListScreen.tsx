@@ -25,7 +25,7 @@ const TestListScreen = () => {
     setLoading(true);
     try {
       // In a real app, this would be an API call
-      const testsData = getTests();
+      const testsData = await getTests();
       setTests(testsData);
     } catch (error) {
       console.error('Error loading tests:', error);
