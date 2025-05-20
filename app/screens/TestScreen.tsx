@@ -4,7 +4,7 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { TestStackParamList } from '../navigation';
-import { getTestById, Question } from '../services/testService';
+import { getTestById, Question, saveTestResult, TestResult } from '../services/testService';
 import { updateUserTestHistory } from '../services/authService';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/Button';
@@ -109,6 +109,22 @@ const TestScreen = () => {
       }
     });
     
+    // Create test result object
+    const testResult: TestResult = {
+      testId: currentTestId,
+      score: score,
+      answers: currentAnswers,
+      date: new Date().toISOString()
+    };
+    
+    // Save test result to local storage (independent of user)
+    try {
+      await saveTestResult(testResult);
+      console.log('Test result saved to local storage successfully');
+    } catch (error) {
+      console.error('Error saving test result to local storage:', error);
+    }
+    
     // Save test attempt for the user if logged in
     if (user) {
       try {
@@ -118,6 +134,7 @@ const TestScreen = () => {
           score,
           totalQuestions: currentQuestions.length
         });
+        console.log('Test history updated for user successfully');
       } catch (error) {
         console.error('Error saving test history:', error);
       }

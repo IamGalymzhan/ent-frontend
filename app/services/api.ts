@@ -6,13 +6,11 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_STORAGE_KEY, API_MODE_KEY, DEBUG_AUTH_TOKEN } from './storageConstants';
 
 // API Constants
 export const API_BASE_URL = 'https://ent-backend-yllb.onrender.com';
 export const API_TIMEOUT = 10000; // 10 seconds timeout
-
-// Storage Key for API Mode
-export const API_MODE_KEY = 'ent_api_mode';
 
 // API Services Toggle
 export interface ApiServiceConfig {
@@ -149,6 +147,45 @@ export const setApiConfig = async (config: ApiConfig): Promise<boolean> => {
   }
 };
 
+// Helper function to get authentication token
+export const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const userData = await AsyncStorage.getItem(USER_STORAGE_KEY);
+    if (!userData) {
+      console.log('No user data found, cannot get auth token');
+      console.log('Using debug token for development');
+      return DEBUG_AUTH_TOKEN; // Use debug token as fallback for development
+    }
+    
+    try {
+      const user = JSON.parse(userData);
+      if (!user.token) {
+        console.log('User found but no token available');
+        console.log('Using debug token for development');
+        
+        // Also try to update the stored user with a token for future use
+        try {
+          user.token = DEBUG_AUTH_TOKEN;
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+          console.log('Added debug token to stored user');
+        } catch (updateError) {
+          console.error('Error updating stored user with token:', updateError);
+        }
+        
+        return DEBUG_AUTH_TOKEN; // Use debug token as fallback for development
+      }
+      
+      return user.token;
+    } catch (parseError) {
+      console.error('Error parsing user data:', parseError);
+      return DEBUG_AUTH_TOKEN; // Use debug token as fallback if parsing fails
+    }
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+    return DEBUG_AUTH_TOKEN; // Use debug token as fallback for any error
+  }
+};
+
 // Helper function to make API calls with proper error handling
 export const apiCall = async <T>(
   endpoint: string,
@@ -164,6 +201,21 @@ export const apiCall = async <T>(
       options.headers = {
         'Content-Type': 'application/json'
       };
+    }
+    
+    // Add authorization header with token for authenticated endpoints
+    // Skip for login and register endpoints which don't need authentication
+    if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+      const token = await getAuthToken();
+      if (token) {
+        options.headers = {
+          ...options.headers,
+          'Authorization': `Bearer ${token}`
+        };
+        console.log('Added auth token to request');
+      } else {
+        console.log('No auth token available for request');
+      }
     }
     
     // Add timeout using AbortController

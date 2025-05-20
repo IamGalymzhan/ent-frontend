@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import * as authService from '../services/authService';
 import { User } from '../services/authService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { USER_STORAGE_KEY, DEBUG_AUTH_TOKEN } from '../services/storageConstants';
 
 type AuthContextType = {
   user: User | null;
@@ -9,6 +11,8 @@ type AuthContextType = {
   login: (username: string, password: string) => Promise<boolean>;
   register: (userData: Omit<User, 'id' | 'testHistory'>) => Promise<boolean>;
   logout: () => Promise<void>;
+  updateUserToken: (token: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +27,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const checkUserLoggedIn = async () => {
       try {
         const user = await authService.getCurrentUser();
+        
+        // Ensure user has a token if logged in
+        if (user && !user.token) {
+          console.log('User found but missing token, adding debug token');
+          user.token = DEBUG_AUTH_TOKEN;
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+        }
+        
         setUser(user);
       } catch (error) {
         console.error('Error checking user logged in:', error);
@@ -42,6 +54,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const user = await authService.login(username, password);
       
       if (user) {
+        // Ensure user has a token
+        if (!user.token) {
+          console.log('Logged in user has no token, adding debug token');
+          user.token = DEBUG_AUTH_TOKEN;
+          // Update in storage
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+        }
+        
         setUser(user);
         return true;
       } else {
@@ -65,6 +85,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const user = await authService.register(userData);
       
       if (user) {
+        // Ensure user has a token
+        if (!user.token) {
+          console.log('Registered user has no token, adding debug token');
+          user.token = DEBUG_AUTH_TOKEN;
+          // Update in storage
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+        }
+        
         setUser(user);
         return true;
       } else {
@@ -93,9 +121,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     }
   };
+  
+  // Function to update user token
+  const updateUserToken = async (token: string): Promise<void> => {
+    try {
+      if (!user) {
+        console.error('Cannot update token: No user is logged in');
+        return;
+      }
+      
+      // Update in memory
+      const updatedUser = { ...user, token };
+      setUser(updatedUser);
+      
+      // Update in storage
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      console.log('User token updated successfully');
+    } catch (error) {
+      console.error('Error updating user token:', error);
+    }
+  };
+
+  // Function to refresh user data from storage
+  const refreshUser = async (): Promise<void> => {
+    try {
+      const userData = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      
+      if (userData) {
+        const updatedUser = JSON.parse(userData);
+        setUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      error, 
+      login, 
+      register, 
+      logout,
+      updateUserToken,
+      refreshUser
+    }}>
       {children}
     </AuthContext.Provider>
   );

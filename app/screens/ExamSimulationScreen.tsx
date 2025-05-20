@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { getTests, Test, Question } from '../services/testService';
+import { getTests, Test, Question, saveTestResult, TestResult } from '../services/testService';
+import { updateUserTestHistory } from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/Button';
 
 // Extend the Question interface to include a uniqueId 
 interface ExamQuestion extends Question {
   uniqueId?: string;
+  subjectId?: number;
+  subjectTitle?: string;
 }
+
+// ENT exam structure - define how many questions to take from each subject
+const ENT_STRUCTURE = {
+  1: 20, // Kazakhstan History - 20 questions
+  2: 10, // Mathematical Literacy - 10 questions
+  3: 10, // Reading Literacy - 10 questions
+  4: 40, // Physics - 40 questions (of 40)
+  5: 40  // Informatics - 40 questions (of 40)
+};
 
 const ExamSimulationScreen = () => {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [timeLeft, setTimeLeft] = useState(120 * 60); // 120 minutes in seconds
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -18,6 +32,7 @@ const ExamSimulationScreen = () => {
   const [score, setScore] = useState(0);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentSubject, setCurrentSubject] = useState<string>('');
 
   useEffect(() => {
     loadQuestions();
@@ -27,24 +42,44 @@ const ExamSimulationScreen = () => {
     setLoading(true);
     try {
       const tests = await getTests();
-      const allQuestions: ExamQuestion[] = [];
+      let examQuestions: ExamQuestion[] = [];
       
-      // Add questions from each test
+      // Add required number of questions from each test according to ENT structure
       tests.forEach((test: Test) => {
-        test.questions.forEach((question: Question) => {
-          allQuestions.push({
+        // Get number of questions needed from this subject
+        const numQuestionsNeeded = ENT_STRUCTURE[test.id as keyof typeof ENT_STRUCTURE] || 0;
+        
+        if (numQuestionsNeeded > 0) {
+          // Shuffle the test questions to randomize selection
+          const shuffledQuestions = [...test.questions].sort(() => Math.random() - 0.5);
+          
+          // Take only the required number of questions (or all if there aren't enough)
+          const selectedQuestions = shuffledQuestions.slice(0, numQuestionsNeeded);
+          
+          // Add subject information to each question
+          const questionsWithSubject = selectedQuestions.map((question: Question): ExamQuestion => ({
             ...question,
-            // Keep original numeric id, add a separate unique identifier
-            uniqueId: `${test.id}-${question.id}` // Create unique ID combining test and question IDs
-          });
-        });
+            uniqueId: `${test.id}-${question.id}`, // Create unique ID combining test and question IDs
+            subjectId: test.id,
+            subjectTitle: test.title
+          }));
+          
+          examQuestions = [...examQuestions, ...questionsWithSubject];
+        }
       });
 
       // Shuffle questions to randomize order
-      const shuffledQuestions = allQuestions.sort(() => Math.random() - 0.5);
-      setQuestions(shuffledQuestions);
+      const finalQuestions = examQuestions.sort(() => Math.random() - 0.5);
+      
+      setQuestions(finalQuestions);
+      
       // Initialize selected answers array with -1 (no answer selected)
-      setSelectedAnswers(new Array(shuffledQuestions.length).fill(-1));
+      setSelectedAnswers(new Array(finalQuestions.length).fill(-1));
+      
+      // Set initial current subject
+      if (finalQuestions.length > 0) {
+        setCurrentSubject(finalQuestions[0]?.subjectTitle || '');
+      }
     } catch (error) {
       console.error('Error loading questions:', error);
       Alert.alert('Қате', 'Сұрақтар жүктеу кезінде қате орын алды');
@@ -64,6 +99,16 @@ const ExamSimulationScreen = () => {
       handleFinishTest();
     }
   }, [timeLeft, showResults]);
+
+  useEffect(() => {
+    // Update current subject when changing questions
+    if (questions.length > 0 && currentQuestionIndex >= 0) {
+      const question = questions[currentQuestionIndex];
+      if (question && question.subjectTitle) {
+        setCurrentSubject(question.subjectTitle);
+      }
+    }
+  }, [currentQuestionIndex, questions]);
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -120,23 +165,98 @@ const ExamSimulationScreen = () => {
   const finishTest = () => {
     const finalScore = calculateScore();
     setScore(finalScore);
+    
+    // Save exam result to local storage
+    const testResult: TestResult = {
+      testId: 999, // Special ID for full exam simulation
+      score: finalScore,
+      answers: selectedAnswers,
+      date: new Date().toISOString()
+    };
+    
+    // Save result to local storage
+    try {
+      saveTestResult(testResult);
+      console.log('Exam result saved to local storage successfully');
+    } catch (error) {
+      console.error('Error saving exam result to local storage:', error);
+    }
+    
+    // Save to user history if logged in
+    if (user) {
+      try {
+        updateUserTestHistory({
+          testId: 999, // Special ID for full exam simulation
+          date: new Date().toISOString(),
+          score: finalScore,
+          totalQuestions: questions.length
+        });
+        console.log('Exam history updated for user successfully');
+      } catch (error) {
+        console.error('Error saving exam history for user:', error);
+      }
+    }
+    
     setShowResults(true);
   };
 
+  const calculateSubjectScores = () => {
+    const subjectScores: Record<number, { correct: number, total: number, title: string }> = {};
+    
+    questions.forEach((question, index) => {
+      if (!question.subjectId) return;
+      
+      // Initialize subject score if not exists
+      if (!subjectScores[question.subjectId]) {
+        subjectScores[question.subjectId] = {
+          correct: 0,
+          total: 0,
+          title: question.subjectTitle || ''
+        };
+      }
+      
+      // Increment total
+      subjectScores[question.subjectId].total++;
+      
+      // Check if answer is correct
+      if (selectedAnswers[index] === question.correctAnswer) {
+        subjectScores[question.subjectId].correct++;
+      }
+    });
+    
+    return subjectScores;
+  };
+
+  // Helper function to format percentage consistently
+  const formatScorePercentage = (score: number, total: number): string => {
+    if (total === 0) return '0.0%';
+    return ((score / total) * 100).toFixed(1) + '%';
+  };
+
   if (showResults) {
+    const subjectScores = calculateSubjectScores();
+    
     return (
       <View className="flex-1 p-4 bg-white">
         <Text className="text-2xl font-bold mb-4">Емтихан нәтижелері</Text>
-        <Text className="text-xl mb-2">
-          Ұпай: {score} / {questions.length}
+        <Text className="text-xl mb-6">
+          Жалпы нәтиже: {score} / {questions.length} ({formatScorePercentage(score, questions.length)})
         </Text>
-        <Text className="text-lg mb-4">
-          Пайыз: {((score / questions.length) * 100).toFixed(2)}%
-        </Text>
+        
+        <Text className="text-lg font-bold mb-2">Пәндер бойынша нәтижелер:</Text>
+        {Object.values(subjectScores).map((subjectScore, index) => (
+          <View key={index} className="mb-2">
+            <Text className="text-base">
+              {subjectScore.title}: {subjectScore.correct} / {subjectScore.total} 
+              ({formatScorePercentage(subjectScore.correct, subjectScore.total)})
+            </Text>
+          </View>
+        ))}
+        
         <Button
           title="Басты бетке оралу"
           onPress={() => navigation.goBack()}
-          className="mt-4"
+          className="mt-8"
         />
       </View>
     );
@@ -155,7 +275,11 @@ const ExamSimulationScreen = () => {
   const questionNumber = currentQuestionIndex + 1;
 
   return (
-    <ScrollView className="flex-1 bg-white">
+    <ScrollView 
+      className="flex-1 bg-white"
+      contentContainerStyle={{ flexGrow: 1, paddingBottom: 120 }}
+      showsVerticalScrollIndicator={true}
+    >
       <View className="px-4 py-3 bg-blue-500">
         <Text className="text-white text-xl font-bold text-center">
           Қалған уақыт: {formatTime(timeLeft)}
@@ -164,7 +288,7 @@ const ExamSimulationScreen = () => {
 
       <View className="px-4 py-3 bg-blue-50">
         <Text className="text-blue-800 font-bold">
-          Сұрақ {questionNumber}/{totalQuestions}
+          Пән: {currentSubject} | Сұрақ {questionNumber}/{totalQuestions}
         </Text>
       </View>
       

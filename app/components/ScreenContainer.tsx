@@ -8,23 +8,26 @@ interface ScreenContainerProps {
   scroll?: boolean;
   className?: string;
   keyboardAvoiding?: boolean;
+  extraTopPadding?: boolean;
 }
 
 const ScreenContainer: React.FC<ScreenContainerProps> = ({ 
   children, 
   scroll = false,
   className = '',
-  keyboardAvoiding = false
+  keyboardAvoiding = false,
+  extraTopPadding = false
 }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   
-  // Calculate bottom padding based on safe area
-  // Instead of using the hook that requires Tab Navigator, just use safe area
+  // Calculate paddings based on safe area
   const bottomPadding = insets.bottom > 0 ? insets.bottom : 20;
+  const topPadding = extraTopPadding ? Math.max(insets.top, 20) : 0;
   
   const containerStyle = { 
     flex: 1,
+    paddingTop: topPadding,
   };
   
   const content = scroll ? (
@@ -32,7 +35,9 @@ const ScreenContainer: React.FC<ScreenContainerProps> = ({
       style={containerStyle}
       contentContainerStyle={[
         styles.scrollContent, 
-        { paddingBottom: bottomPadding + 20 } // Add extra padding at bottom for better scrolling
+        { 
+          paddingBottom: bottomPadding + 80, // Add extra padding at bottom for better scrolling
+        }
       ]} 
       className={className}
       keyboardShouldPersistTaps="handled"
@@ -41,7 +46,10 @@ const ScreenContainer: React.FC<ScreenContainerProps> = ({
       {children}
     </ScrollView>
   ) : (
-    <View style={containerStyle} className={`flex-1 ${className}`}>
+    <View 
+      style={[containerStyle, { paddingBottom: bottomPadding }]} 
+      className={`flex-1 ${className}`}
+    >
       {children}
     </View>
   );

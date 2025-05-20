@@ -45,6 +45,12 @@ const TestResultScreen = () => {
   const totalQuestions = questions?.length || 0;
   const percentageScore = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
   
+  // Helper function to format percentage consistently
+  const formatScorePercentage = (score: number, total: number): string => {
+    if (total === 0) return '0%';
+    return Math.round((score / total) * 100) + '%';
+  };
+  
   const getScoreColor = () => {
     if (percentageScore >= 80) return 'text-green-600';
     if (percentageScore >= 60) return 'text-blue-600';
@@ -88,7 +94,7 @@ const TestResultScreen = () => {
           <View className="my-4 items-center">
             <View className="h-32 w-32 rounded-full bg-blue-100 items-center justify-center">
               <Text className={`text-4xl font-bold ${getScoreColor()}`}>
-                {percentageScore}%
+                {formatScorePercentage(score, totalQuestions)}
               </Text>
             </View>
             <Text className="mt-2 text-lg font-medium">

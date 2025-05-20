@@ -3,13 +3,13 @@ import { View, Text, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
-import { getTests, analyzePerformance, Test } from '../services/testService';
+import { getTests, analyzePerformance, Test, synchronizeTestData } from '../services/testService';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import ScreenContainer from '../components/ScreenContainer';
 
 const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const [performance, setPerformance] = useState<{
     totalTests: number;
     averageScore: number;
@@ -27,6 +27,12 @@ const ProfileScreen = () => {
     
     setLoading(true);
     try {
+      // First synchronize test data to ensure user.testHistory is up-to-date
+      await synchronizeTestData();
+      
+      // Refresh user data after synchronization (to get updated test history)
+      await refreshUser();
+      
       // Load test data and performance data in parallel
       const [testsData, performanceData] = await Promise.all([
         getTests(),
@@ -98,6 +104,23 @@ const ProfileScreen = () => {
     return 'text-red-600';
   };
   
+  // Improved helper function to format percentage display from score values
+  const formatScorePercentage = (score: number): string => {
+    // If the score is very large (greater than 100), it might be a raw score
+    // that needs to be displayed as is
+    if (score > 100) {
+      return score.toFixed(1);
+    }
+    
+    // Check if score is already a percentage (between 1 and 100)
+    if (score > 1 && score <= 100) {
+      return score.toFixed(1) + '%';
+    } else {
+      // If score is a decimal (e.g. 0.75 = 75%), multiply by 100
+      return (score * 100).toFixed(1) + '%';
+    }
+  };
+  
   return (
     <ScreenContainer scroll className="bg-gray-50">
       <View className="bg-blue-600 p-6 pt-10 rounded-b-3xl">
@@ -125,7 +148,7 @@ const ProfileScreen = () => {
             <View className="items-center">
               <Text className="text-gray-600 mb-1">Орташа балл</Text>
               <Text className="text-2xl font-bold text-blue-600">
-                {performance ? `${(performance.averageScore * 100).toFixed(1)}%` : '-'}
+                {performance && performance.averageScore !== undefined ? formatScorePercentage(performance.averageScore) : '-'}
               </Text>
             </View>
           </Card>
@@ -138,7 +161,7 @@ const ProfileScreen = () => {
               <View key={index} className="flex-row items-center mb-1">
                 <MaterialIcons name="priority-high" size={18} color="#dc2626" />
                 <Text className="text-gray-700 ml-2">
-                  {area.title}: {(area.averageScore * 100).toFixed(1)}%
+                  {area.title}: {formatScorePercentage(area.averageScore)}
                 </Text>
               </View>
             ))}
@@ -150,14 +173,20 @@ const ProfileScreen = () => {
         {testHistory.length > 0 ? (
           testHistory.map((test, index) => {
             const testInfo = tests.find(t => t.id === test.testId);
+            const scorePercentage = ((test.score / test.totalQuestions) * 100).toFixed(1) + '%';
             
             return (
               <Card key={index} className="mb-3">
                 <View className="flex-row justify-between items-center">
                   <Text className="font-bold">{testInfo?.title || `Тест ${test.testId}`}</Text>
-                  <Text className={`font-bold ${getScoreColor(test.score, test.totalQuestions)}`}>
-                    {test.score}/{test.totalQuestions}
-                  </Text>
+                  <View className="flex-row items-center">
+                    <Text className={`font-bold ${getScoreColor(test.score, test.totalQuestions)}`}>
+                      {test.score}/{test.totalQuestions}
+                    </Text>
+                    <Text className={`ml-2 text-sm ${getScoreColor(test.score, test.totalQuestions)}`}>
+                      ({scorePercentage})
+                    </Text>
+                  </View>
                 </View>
                 <Text className="text-gray-500 text-sm mt-1">{formatDate(test.date)}</Text>
               </Card>

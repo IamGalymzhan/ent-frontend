@@ -84,7 +84,9 @@ function calculateSubjectPerformance(history: TestAttempt[], tests: Test[]) {
     
     const totalScore = attempts.reduce((sum, attempt) => sum + attempt.score, 0);
     const totalQuestions = attempts.reduce((sum, attempt) => sum + attempt.totalQuestions, 0);
-    const percentageScore = (totalScore / totalQuestions) * 100;
+    
+    // Calculate percentage as a number between 0-100
+    const percentageScore = totalQuestions > 0 ? (totalScore / totalQuestions) * 100 : 0;
     
     return {
       id: test.id,
@@ -107,7 +109,7 @@ function generateOverview(user: User, subjectPerformance: any[]): string {
   
   const totalScore = subjectPerformance.reduce((sum, subject) => sum + subject.totalScore, 0);
   const totalQuestions = subjectPerformance.reduce((sum, subject) => sum + subject.totalQuestions, 0);
-  const averagePercentage = (totalScore / totalQuestions) * 100;
+  const averagePercentage = totalQuestions > 0 ? (totalScore / totalQuestions) * 100 : 0;
   
   let performanceLevel;
   if (averagePercentage >= 90) {
@@ -137,7 +139,7 @@ function generateStrengthsFeedback(strengths: any[]): string[] {
 
 function generateWeaknessesFeedback(weaknesses: any[]): string[] {
   if (weaknesses.length === 0) {
-    return ['Әлсіз жақтарыңыз анықталған жоқ. Бірақ барлық пәндерді әрқашан жетілдіруге болады.'];
+    return ['Әлсіз жақтарыңыз анықталған жоқ немесе жеткілікті деректер жоқ.'];
   }
   
   return weaknesses.map(subject => {
@@ -149,24 +151,22 @@ function generateRecommendations(weaknesses: any[], strengths: any[]): string[] 
   const recommendations = [];
   
   if (weaknesses.length === 0 && strengths.length === 0) {
-    return ['Кеңестер берілмес бұрын алдымен бірнеше тест тапсырыңыз.'];
-  }
-  
-  // Add weaknesses recommendations
-  weaknesses.forEach(subject => {
-    recommendations.push(`${subject.title} пәні бойынша қосымша дайындық керек.`);
-  });
-  
-  // Add general recommendations
-  recommendations.push('Күн сайын 2-3 сағат дайындалыңыз.');
-  
-  if (strengths.length > 0) {
-    recommendations.push('Күшті пәндеріңізді сақтап, әлсіз пәндеріңізге уақыт бөліңіз.');
+    recommendations.push('Бірнеше тест тапсырып, нәтижелерді талдаңыз.');
+    return recommendations;
   }
   
   if (weaknesses.length > 0) {
-    recommendations.push('Әлсіз пәндер бойынша қосымша материалдарды қараңыз.');
+    weaknesses.forEach(weakness => {
+      recommendations.push(`"${weakness.title}" пәні бойынша көбірек дайындалыңыз.`);
+    });
   }
+  
+  if (strengths.length > 0) {
+    const randomStrength = strengths[Math.floor(Math.random() * strengths.length)];
+    recommendations.push(`"${randomStrength.title}" пәні бойынша жақсы нәтиже көрсетіп келесіз, осы деңгейді сақтаңыз.`);
+  }
+  
+  recommendations.push('Күнделікті 30-60 минут уақыт бөліп, ЕНТ-ға дайындалыңыз.');
   
   return recommendations;
 } 

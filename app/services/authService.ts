@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import users from '../assets/data/users.json';
 import { apiCall, API_ENDPOINTS, getApiConfig } from './api';
+import { USER_STORAGE_KEY } from './storageConstants';
 
 // Types
 export interface User {
@@ -10,6 +11,7 @@ export interface User {
   fullName: string;
   email: string;
   testHistory: TestAttempt[];
+  token?: string; // JWT token returned from the backend
 }
 
 export interface TestAttempt {
@@ -18,9 +20,6 @@ export interface TestAttempt {
   score: number;
   totalQuestions: number;
 }
-
-// Key constants
-const USER_STORAGE_KEY = 'ent_user';
 
 // Service methods
 export const login = async (username: string, password: string): Promise<User | null> => {
@@ -177,41 +176,39 @@ export const updateUserTestHistory = async (testAttempt: TestAttempt): Promise<b
   try {
     // Check if we should use the real backend
     const config = await getApiConfig();
+    console.log('updateUserTestHistory - Auth useBackend:', config.auth.useBackend, 'Tests useBackend:', config.tests.useBackend);
     
-    if (config.auth.useBackend) {
-      // Use real backend API
-      await apiCall(API_ENDPOINTS.AUTH.UPDATE_TEST_HISTORY, {
-        method: 'POST',
-        body: JSON.stringify(testAttempt)
-      });
-      
-      // Update local user data for offline access
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        const updatedUser = {
-          ...currentUser,
-          testHistory: [...currentUser.testHistory, testAttempt],
-        };
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
-      }
-      
-      return true;
-    } else {
-      // Simulate with local storage only
-      const currentUser = await getCurrentUser();
-      
-      if (!currentUser) {
-        return false;
-      }
-      
-      const updatedUser = {
-        ...currentUser,
-        testHistory: [...currentUser.testHistory, testAttempt],
-      };
-      
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
-      return true;
+    // Always update local user data first for redundancy and offline access
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      console.error('Cannot update test history: No current user found');
+      return false;
     }
+    
+    const updatedUser = {
+      ...currentUser,
+      testHistory: [...currentUser.testHistory, testAttempt],
+    };
+    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+    
+    // Only make API call if BOTH auth AND tests are set to use backend
+    if (config.auth.useBackend && config.tests.useBackend) {
+      try {
+        // Use real backend API
+        await apiCall(API_ENDPOINTS.AUTH.UPDATE_TEST_HISTORY, {
+          method: 'POST',
+          body: JSON.stringify(testAttempt)
+        });
+        console.log('Test history updated via API successfully');
+      } catch (apiError) {
+        console.error('API call to update test history failed, but local update succeeded:', apiError);
+        // We've already updated locally, so consider this a partial success
+      }
+    } else {
+      console.log('Using local storage only for test history update (API calls disabled)');
+    }
+    
+    return true;
   } catch (error) {
     console.error('Update test history error:', error);
     return false;
