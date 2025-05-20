@@ -24,14 +24,10 @@ export interface TestAttempt {
 // Service methods
 export const login = async (username: string, password: string): Promise<User | null> => {
   try {
-    console.log('Login attempt for user:', username);
-    
     // Check if we should use the real backend
     const config = await getApiConfig();
-    console.log('API config for auth:', config.auth);
     
     if (config.auth.useBackend) {
-      console.log('Using backend for login...');
       // Use real backend API
       try {
         const user = await apiCall<User>(API_ENDPOINTS.AUTH.LOGIN, {
@@ -39,7 +35,6 @@ export const login = async (username: string, password: string): Promise<User | 
           body: JSON.stringify({ username, password })
         });
         
-        console.log('Login successful with backend');
         // Store user in AsyncStorage
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
         return user;
@@ -48,19 +43,16 @@ export const login = async (username: string, password: string): Promise<User | 
         return null;
       }
     } else {
-      console.log('Using local simulation for login...');
       // Simulate API call with local data
       const user = users.find(
         (user) => user.username === username && user.password === password
       );
 
       if (user) {
-        console.log('Login successful with local data');
         // Store user in AsyncStorage
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
         return user;
       }
-      console.log('Invalid credentials in local data');
       return null;
     }
   } catch (error) {
@@ -114,6 +106,9 @@ export const register = async (userData: Omit<User, 'id' | 'testHistory'>): Prom
 
 export const logout = async (): Promise<boolean> => {
   try {
+    // Import clearAuthTokenCache function to avoid circular dependencies
+    const { clearAuthTokenCache } = require('./api');
+    
     // Check if we should use the real backend
     const config = await getApiConfig();
     
@@ -124,19 +119,53 @@ export const logout = async (): Promise<boolean> => {
           method: 'POST'
         });
       } catch (error) {
-        console.warn('Could not connect to backend for logout, continuing with local logout');
         // Continue with local logout even if API call fails
       }
     }
     
+    // Clear the token cache
+    clearAuthTokenCache();
+    
     // Always remove from local storage
     await AsyncStorage.removeItem(USER_STORAGE_KEY);
+    
+    // Special handling for web platform
+    try {
+      // Check if we're running in a browser environment
+      if (typeof window !== 'undefined' && window.localStorage) {
+        // Clear browser localStorage
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+        
+        // For web, we might need to clear cookies as well
+        if (window.document) {
+          document.cookie.split(";").forEach((c) => {
+            document.cookie = c
+              .replace(/^ +/, "")
+              .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+          });
+        }
+      }
+    } catch (webError) {
+      console.error('Web-specific logout error (non-critical):', webError);
+    }
+    
     return true;
   } catch (error) {
     console.error('Logout error:', error);
+    
     // Try to remove from local storage even if there was an error
     try {
+      // Try to clear token cache even in error case
+      const { clearAuthTokenCache } = require('./api');
+      clearAuthTokenCache();
+      
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      
+      // Also try web platform specific cleanup
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(USER_STORAGE_KEY);
+      }
+      
       return true;
     } catch {
       return false;
@@ -151,10 +180,26 @@ export const getCurrentUser = async (): Promise<User | null> => {
     
     if (config.auth.useBackend) {
       try {
-        // Try to get from backend first
+        // First check local storage for a valid user to avoid unnecessary API calls
+        const storageData = await AsyncStorage.getItem(USER_STORAGE_KEY);
+        if (storageData) {
+          const storedUser = JSON.parse(storageData);
+          if (storedUser && storedUser.token) {
+            // If we have a valid user with token in storage, use that first
+            return storedUser;
+          }
+        }
+        
+        // If no valid user in storage, try the backend
         const user = await apiCall<User>(API_ENDPOINTS.AUTH.CURRENT_USER, {
           method: 'GET'
         });
+        
+        // Save the user to storage for future use
+        if (user) {
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+        }
+        
         return user;
       } catch (apiError) {
         // Fallback to local storage if API fails
@@ -176,7 +221,6 @@ export const updateUserTestHistory = async (testAttempt: TestAttempt): Promise<b
   try {
     // Check if we should use the real backend
     const config = await getApiConfig();
-    console.log('updateUserTestHistory - Auth useBackend:', config.auth.useBackend, 'Tests useBackend:', config.tests.useBackend);
     
     // Always update local user data first for redundancy and offline access
     const currentUser = await getCurrentUser();
@@ -199,13 +243,10 @@ export const updateUserTestHistory = async (testAttempt: TestAttempt): Promise<b
           method: 'POST',
           body: JSON.stringify(testAttempt)
         });
-        console.log('Test history updated via API successfully');
       } catch (apiError) {
         console.error('API call to update test history failed, but local update succeeded:', apiError);
         // We've already updated locally, so consider this a partial success
       }
-    } else {
-      console.log('Using local storage only for test history update (API calls disabled)');
     }
     
     return true;

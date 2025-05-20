@@ -65,24 +65,6 @@ export const initializeApiConfig = async (): Promise<void> => {
     if (!existingConfig) {
       // No config exists yet, set the default config
       await AsyncStorage.setItem(API_MODE_KEY, JSON.stringify(DEFAULT_API_CONFIG));
-      console.log('API config initialized with defaults');
-    } else {
-      // Config exists, but ensure auth.useBackend is true
-      const parsedConfig = JSON.parse(existingConfig);
-      
-      // Check if auth.useBackend is false and update it
-      if (!parsedConfig.auth?.useBackend) {
-        parsedConfig.auth = { 
-          ...parsedConfig.auth,
-          useBackend: true 
-        };
-        
-        // Save the updated config
-        await AsyncStorage.setItem(API_MODE_KEY, JSON.stringify(parsedConfig));
-        console.log('API config updated: auth.useBackend set to true');
-      } else {
-        console.log('API config already exists with auth.useBackend=true');
-      }
     }
   } catch (error) {
     console.error('Error initializing API config:', error);
@@ -100,13 +82,11 @@ export const getApiConfig = async (): Promise<ApiConfig> => {
   try {
     const config = await AsyncStorage.getItem(API_MODE_KEY);
     if (!config) {
-      console.log('No API config found, initializing with defaults');
       await AsyncStorage.setItem(API_MODE_KEY, JSON.stringify(DEFAULT_API_CONFIG));
       return DEFAULT_API_CONFIG;
     }
     
     const parsedConfig = JSON.parse(config);
-    console.log('Retrieved API config:', parsedConfig);
     return parsedConfig;
   } catch (error) {
     console.error('Error loading API config:', error);
@@ -127,7 +107,6 @@ export const setApiServiceConfig = async (
     };
     
     await AsyncStorage.setItem(API_MODE_KEY, JSON.stringify(newConfig));
-    console.log(`API config updated for ${service}:`, { useBackend });
     return true;
   } catch (error) {
     console.error(`Error setting API config for ${service}:`, error);
@@ -139,7 +118,6 @@ export const setApiServiceConfig = async (
 export const setApiConfig = async (config: ApiConfig): Promise<boolean> => {
   try {
     await AsyncStorage.setItem(API_MODE_KEY, JSON.stringify(config));
-    console.log('Full API config updated:', config);
     return true;
   } catch (error) {
     console.error('Error setting API config:', error);
@@ -147,43 +125,63 @@ export const setApiConfig = async (config: ApiConfig): Promise<boolean> => {
   }
 };
 
+// Cache for the auth token, to avoid reading from AsyncStorage on every API call
+let cachedAuthToken: string | null = null;
+let tokenLastFetched = 0;
+const TOKEN_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 // Helper function to get authentication token
 export const getAuthToken = async (): Promise<string | null> => {
   try {
+    // Return cached token if available and not expired
+    const now = Date.now();
+    if (cachedAuthToken && now - tokenLastFetched < TOKEN_CACHE_DURATION) {
+      return cachedAuthToken;
+    }
+
     const userData = await AsyncStorage.getItem(USER_STORAGE_KEY);
     if (!userData) {
-      console.log('No user data found, cannot get auth token');
-      console.log('Using debug token for development');
+      cachedAuthToken = DEBUG_AUTH_TOKEN;
+      tokenLastFetched = now;
       return DEBUG_AUTH_TOKEN; // Use debug token as fallback for development
     }
     
     try {
       const user = JSON.parse(userData);
       if (!user.token) {
-        console.log('User found but no token available');
-        console.log('Using debug token for development');
-        
         // Also try to update the stored user with a token for future use
         try {
           user.token = DEBUG_AUTH_TOKEN;
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-          console.log('Added debug token to stored user');
         } catch (updateError) {
           console.error('Error updating stored user with token:', updateError);
         }
         
+        cachedAuthToken = DEBUG_AUTH_TOKEN;
+        tokenLastFetched = now;
         return DEBUG_AUTH_TOKEN; // Use debug token as fallback for development
       }
       
+      // Cache the token
+      cachedAuthToken = user.token;
+      tokenLastFetched = now;
       return user.token;
     } catch (parseError) {
       console.error('Error parsing user data:', parseError);
+      cachedAuthToken = DEBUG_AUTH_TOKEN;
+      tokenLastFetched = now;
       return DEBUG_AUTH_TOKEN; // Use debug token as fallback if parsing fails
     }
   } catch (error) {
     console.error('Error getting auth token:', error);
     return DEBUG_AUTH_TOKEN; // Use debug token as fallback for any error
   }
+};
+
+// Clear the token cache on logout
+export const clearAuthTokenCache = () => {
+  cachedAuthToken = null;
+  tokenLastFetched = 0;
 };
 
 // Helper function to make API calls with proper error handling
@@ -194,7 +192,10 @@ export const apiCall = async <T>(
   try {
     const url = `${API_BASE_URL}${endpoint}`;
 
-    console.log('API Call:', url, 'Method:', options.method || 'GET', 'Timeout:', API_TIMEOUT, 'ms');
+    // Minimize logging
+    if (endpoint !== '/auth/current-user') { // don't log frequent auth checks
+      console.log(`API ${options.method || 'GET'} to ${endpoint}`);
+    }
     
     // Set default headers if not provided
     if (!options.headers) {
@@ -212,9 +213,6 @@ export const apiCall = async <T>(
           ...options.headers,
           'Authorization': `Bearer ${token}`
         };
-        console.log('Added auth token to request');
-      } else {
-        console.log('No auth token available for request');
       }
     }
     
@@ -233,11 +231,9 @@ export const apiCall = async <T>(
       
       clearTimeout(timeoutId);
       
-      console.log('API Response status:', response.status);
-      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('API Error:', errorData);
+        console.error(`API Error (${response.status}):`, endpoint);
         throw new Error(errorData.message || `API Error: ${response.status}`);
       }
       
@@ -253,7 +249,7 @@ export const apiCall = async <T>(
         throw new Error(`Request timed out after ${API_TIMEOUT/1000} seconds. The server might be overloaded or temporarily unavailable.`);
       }
       
-      console.error('API call error:', error.message);
+      console.error(`API error with ${endpoint}:`, error.message);
     } else {
       console.error('Unknown API call error');
     }

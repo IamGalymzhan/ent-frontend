@@ -3,7 +3,7 @@ import { View, Text, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { useAuth } from '../contexts/AuthContext';
-import { getTests, analyzePerformance, Test, synchronizeTestData } from '../services/testService';
+import { getTests, analyzePerformance, Test, synchronizeTestData, debugTestResultsStorage } from '../services/testService';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import ScreenContainer from '../components/ScreenContainer';
@@ -27,11 +27,18 @@ const ProfileScreen = () => {
     
     setLoading(true);
     try {
-      // First synchronize test data to ensure user.testHistory is up-to-date
-      await synchronizeTestData();
+      // First check if we actually need to synchronize by comparing test results count
+      // with user test history count to avoid unnecessary operations
+      const testResultsData = await debugTestResultsStorage();
+      const userTestHistoryCount = user.testHistory?.length || 0;
       
-      // Refresh user data after synchronization (to get updated test history)
-      await refreshUser();
+      // Only synchronize if we have test results that aren't in user history
+      if (testResultsData.count > userTestHistoryCount) {
+        await synchronizeTestData();
+        
+        // Refresh user data after synchronization (to get updated test history)
+        await refreshUser();
+      }
       
       // Load test data and performance data in parallel
       const [testsData, performanceData] = await Promise.all([
@@ -49,19 +56,28 @@ const ProfileScreen = () => {
   };
   
   const handleLogout = async () => {
-    Alert.alert(
-      'Шығу',
-      'Сіз шынымен шыққыңыз келе ме?',
-      [
-        { text: 'Жоқ', style: 'cancel' },
-        { 
-          text: 'Иә', 
-          onPress: async () => {
-            await logout();
+    // Check if we're in a browser environment
+    const isWeb = typeof window !== 'undefined' && window.navigator && window.navigator.userAgent;
+    
+    if (isWeb) {
+      // On web, directly logout without confirmation
+      await logout();
+    } else {
+      // On mobile, show confirmation alert
+      Alert.alert(
+        'Шығу',
+        'Сіз шынымен шыққыңыз келе ме?',
+        [
+          { text: 'Жоқ', style: 'cancel' },
+          { 
+            text: 'Иә', 
+            onPress: async () => {
+              await logout();
+            }
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
   
   if (!user) {
